@@ -1,0 +1,1523 @@
+const ComponentFunction = function() {
+  // @section:imports @depends:[]
+  const React = require('react');
+  const { useState, useEffect, useContext, useMemo, useCallback } = React;
+  const { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, Modal, Alert, Platform, StatusBar, Switch, ActivityIndicator, KeyboardAvoidingView, FlatList, Image, Dimensions } = require('react-native');
+  const { MaterialIcons } = require('@expo/vector-icons');
+  const { createBottomTabNavigator } = require('@react-navigation/bottom-tabs');
+  const { useSafeAreaInsets } = require('react-native-safe-area-context');
+  const { useQuery, useMutation } = require('platform-hooks');
+  // const { useAudioPlayer } = require('platform-hooks');
+  const useAudioPlayer = function() { return null; };
+  const { useShare } = require('platform-hooks');
+  // const { useBannerAd, useInterstitialAd } = require('platform-hooks');
+  const { useNotifications, usePushNotifications } = require('platform-hooks');
+  // @end:imports
+
+  // @section:layout-constants @depends:[]
+  var TAB_MENU_HEIGHT = Platform.OS === 'web' ? 56 : 49;
+  var SCROLL_EXTRA_PADDING = 16;
+  var WEB_TAB_MENU_PADDING = 90;
+  var FAB_SPACING = 16;
+  // @end:layout-constants
+
+  // @section:theme @depends:[]
+  const storageStrategy = 'all-local';
+  const primaryColor = '#D97706';
+  const accentColor = '#F59E0B';
+  const backgroundColor = '#FFF7ED';
+  const cardColor = '#FFFFFF';
+  const textPrimary = '#1F2937';
+  const textSecondary = '#6B7280';
+  const designStyle = 'modern';
+  // @end:theme
+
+  // @section:navigation-setup @depends:[]
+  const Tab = createBottomTabNavigator();
+  // @end:navigation-setup
+
+  // @section:ThemeContext @depends:[theme]
+  const ThemeContext = React.createContext({
+    theme: { colors: { primary: primaryColor, accent: accentColor, background: backgroundColor, card: cardColor, textPrimary: textPrimary, textSecondary: textSecondary, border: '#E5E7EB', success: '#10B981', error: '#EF4444', warning: '#F59E0B' } },
+    darkMode: false,
+    toggleDarkMode: function() {},
+    designStyle: designStyle,
+  });
+
+  const ThemeProvider = function(props) {
+    const [darkMode, setDarkMode] = useState(false);
+    const lightTheme = useMemo(function() {
+      return {
+        colors: {
+          primary: primaryColor,
+          accent: accentColor,
+          background: backgroundColor,
+          card: cardColor,
+          textPrimary: textPrimary,
+          textSecondary: textSecondary,
+          border: '#E5E7EB',
+          success: '#10B981',
+          error: '#EF4444',
+          warning: '#F59E0B',
+          gold: '#FFD700',
+          saffron: '#FF6600'
+        }
+      };
+    }, []);
+    const darkTheme = useMemo(function() {
+      return {
+        colors: {
+          primary: primaryColor,
+          accent: accentColor,
+          background: '#1F2937',
+          card: '#374151',
+          textPrimary: '#F9FAFB',
+          textSecondary: '#D1D5DB',
+          border: '#4B5563',
+          success: '#10B981',
+          error: '#EF4444',
+          warning: '#F59E0B',
+          gold: '#FFD700',
+          saffron: '#FF6600'
+        }
+      };
+    }, []);
+    const theme = darkMode ? darkTheme : lightTheme;
+    const toggleDarkMode = useCallback(function() {
+      setDarkMode(function(prev) { return !prev; });
+    }, []);
+    const value = useMemo(function() {
+      return { theme: theme, darkMode: darkMode, toggleDarkMode: toggleDarkMode, designStyle: designStyle };
+    }, [theme, darkMode, toggleDarkMode]);
+    return React.createElement(ThemeContext.Provider, { testID: 'Provider-1', value: value }, props.children);
+  };
+
+  const useTheme = function() { return useContext(ThemeContext); };
+  // @end:ThemeContext
+
+  // @section:HomeScreen-state @depends:[ThemeContext]
+  const useHomeScreenState = function() {
+    var themeContext = useTheme();
+    var theme = themeContext.theme;
+    var dailyQuoteState = useState({ text: 'श्रद्धा और भक्ति से भरे हृदय में ही भगवान का वास होता है।', author: 'श्रीमद्भागवत' });
+    var dailyQuote = dailyQuoteState[0];
+    var setDailyQuote = dailyQuoteState[1];
+    var bannerIndexState = useState(0);
+    var bannerIndex = bannerIndexState[0];
+    var setBannerIndex = bannerIndexState[1];
+    
+    var { data: favorites } = useQuery('favorites', {});
+    var { mutate: insertFavorite } = useMutation('favorites', 'insert');
+    var { mutate: deleteFavorite } = useMutation('favorites', 'delete');
+    
+    return { 
+      theme: theme, 
+      dailyQuote: dailyQuote, 
+      setDailyQuote: setDailyQuote,
+      bannerIndex: bannerIndex,
+      setBannerIndex: setBannerIndex,
+      favorites: favorites || [],
+      insertFavorite: insertFavorite,
+      deleteFavorite: deleteFavorite
+    };
+  };
+  // @end:HomeScreen-state
+
+  // @section:HomeScreen-handlers @depends:[HomeScreen-state]
+  var homeScreenHandlers = {
+    toggleQuoteFavorite: function(state, quote) {
+      var isFavorited = state.favorites.some(function(fav) { return fav.type === 'quote' && fav.content === quote.text; });
+      if (isFavorited) {
+        var existing = state.favorites.find(function(fav) { return fav.type === 'quote' && fav.content === quote.text; });
+        if (existing && existing.id) {
+          state.deleteFavorite({ id: existing.id }).catch(function(error) {
+            Platform.OS === 'web' ? window.alert(error.message) : Alert.alert('Error', error.message);
+          });
+        }
+      } else {
+        state.insertFavorite({
+          type: 'quote',
+          title: quote.author,
+          content: quote.text,
+          dateAdded: new Date().toISOString()
+        }).catch(function(error) {
+          Platform.OS === 'web' ? window.alert(error.message) : Alert.alert('Error', error.message);
+        });
+      }
+    },
+    cycleBanner: function(state) {
+      state.setBannerIndex(function(prev) { return (prev + 1) % 5; });
+    }
+  };
+  // @end:HomeScreen-handlers
+
+  // @section:HomeScreen-Banner @depends:[styles]
+  var renderBannerSlider = function(theme, bannerIndex, onNext) {
+    var banners = [
+      { image: 'IMAGE:hindu-temple-sunrise-golden', text: 'आरती और भजन के साथ भक्ति में लीन हों' },
+      { image: 'IMAGE:lord-ganesha-temple-statue', text: 'गणेश जी के आशीर्वाद से सफलता पाएं' },
+      { image: 'IMAGE:hindu-prayer-ritual-temple', text: 'मंत्र जाप से मन की शांति पाएं' },
+      { image: 'IMAGE:temple-bells-golden-sunset', text: 'चालीसा पाठ से भक्ति भावना बढ़ाएं' },
+      { image: 'IMAGE:spiritual-meditation-om-symbol', text: 'दैनिक आध्यात्मिक संदेश पाएं' }
+    ];
+    
+    var currentBanner = banners[bannerIndex];
+    
+    return React.createElement(View, { testID: 'View-1', style: styles.bannerContainer, componentId: 'home-banner' },
+      React.createElement(TouchableOpacity, { testID: 'TouchableOpacity-1', style: styles.bannerSlide,
+        onPress: onNext,
+        componentId: 'banner-slide-' + bannerIndex
+      },
+        React.createElement(Image, { testID: 'Image-1', source: { uri: currentBanner.image },
+          style: styles.bannerImage,
+          componentId: 'banner-image'
+        }),
+        React.createElement(View, { testID: 'View-2', style: styles.bannerOverlay },
+          React.createElement(Text, { testID: 'Text-1', style: styles.bannerText }, currentBanner.text)
+        )
+      ),
+      React.createElement(View, { testID: 'View-3', style: styles.bannerIndicators },
+        banners.map(function(_, index) {
+          return React.createElement(View, { testID: 'View-4', key: String(index),
+            style: [
+              styles.bannerDot,
+              { backgroundColor: index === bannerIndex ? theme.colors.gold : 'rgba(255,255,255,0.5)' }
+            ],
+            componentId: 'banner-dot-' + index
+          });
+        })
+      )
+    );
+  };
+  // @end:HomeScreen-Banner
+
+  // @section:HomeScreen-Cards @depends:[styles]
+  var renderCategoryCards = function(theme, onCardPress) {
+    var categories = [
+      { id: 'aarti', title: 'आरती', description: 'भगवान की आरती करें', icon: 'lightbulb-outline', screen: 'Aarti' },
+      { id: 'chalisa', title: 'चालीसा', description: 'चालीसा का पाठ करें', icon: 'menu-book', screen: 'Chalisa' },
+      { id: 'bhajan', title: 'भजन', description: 'भजन सुनें और गाएं', icon: 'music-note', screen: 'Bhajan' },
+      { id: 'mantra', title: 'मंत्र', description: 'मंत्र जाप करें', icon: 'self-improvement', screen: 'Mantra' },
+      { id: 'sundarkand', title: 'सुन्दरकाण्ड', description: 'सुन्दरकाण्ड पढ़ें', icon: 'import-contacts', screen: 'Sundarkand' },
+      { id: 'festivals', title: 'त्यौहार', description: 'आने वाले त्यौहार देखें', icon: 'event', screen: 'Festivals' },
+      { id: 'darshan', title: 'लाइव दर्शन', description: 'मंदिर का लाइव दर्शन', icon: 'videocam', screen: 'LiveDarshan' },
+      { id: 'downloads', title: 'डाउनलोड', description: 'ऑफलाइन कंटेंट', icon: 'download', screen: 'Downloads' }
+    ];
+    
+    return React.createElement(View, { testID: 'View-5', style: styles.cardsContainer },
+      React.createElement(Text, { testID: 'Text-2', style: [styles.sectionTitle, { color: theme.colors.textPrimary }] }, 'भक्ति श्रेणियां'),
+      React.createElement(View, { testID: 'View-6', style: styles.cardsGrid },
+        categories.map(function(category) {
+          return React.createElement(TouchableOpacity, { testID: 'TouchableOpacity-2', key: category.id,
+            style: [styles.categoryCard, { backgroundColor: theme.colors.card }],
+            onPress: function() { onCardPress(category); },
+            componentId: 'card-' + category.id
+          },
+            React.createElement(View, { testID: 'View-7', style: [styles.cardIcon, { backgroundColor: theme.colors.primary }] },
+              React.createElement(MaterialIcons, { testID: 'MaterialIcons-1', name: category.icon, 
+                size: 24, 
+                color: '#FFFFFF' 
+              })
+            ),
+            React.createElement(Text, { testID: 'Text-3', style: [styles.cardTitle, { color: theme.colors.textPrimary }] }, category.title),
+            React.createElement(Text, { testID: 'Text-4', style: [styles.cardDescription, { color: theme.colors.textSecondary }] }, category.description)
+          );
+        })
+      )
+    );
+  };
+  // @end:HomeScreen-Cards
+
+  // @section:HomeScreen-DailyQuote @depends:[styles]
+  var renderDailyQuote = function(theme, quote, favorites, onToggleFavorite, shareHook) {
+    var isFavorited = favorites.some(function(fav) { return fav.type === 'quote' && fav.content === quote.text; });
+    
+    return React.createElement(View, { testID: 'View-8', style: styles.quoteContainer },
+      React.createElement(Text, { testID: 'Text-5', style: [styles.sectionTitle, { color: theme.colors.textPrimary }] }, 'आज का आध्यात्मिक संदेश'),
+      React.createElement(View, { testID: 'View-9', style: [styles.quoteCard, { backgroundColor: theme.colors.card }] },
+        React.createElement(MaterialIcons, { testID: 'MaterialIcons-2', name: 'format-quote', 
+          size: 32, 
+          color: theme.colors.gold,
+          style: { alignSelf: 'center', marginBottom: 12 }
+        }),
+        React.createElement(Text, { testID: 'Text-6', style: [styles.quoteText, { color: theme.colors.textPrimary }] }, quote.text),
+        React.createElement(Text, { testID: 'Text-7', style: [styles.quoteAuthor, { color: theme.colors.textSecondary }] }, '- ' + quote.author),
+        React.createElement(View, { testID: 'View-10', style: styles.quoteActions },
+          React.createElement(TouchableOpacity, { testID: 'TouchableOpacity-3', style: styles.quoteActionButton,
+            onPress: function() { onToggleFavorite(quote); },
+            componentId: 'quote-favorite-button'
+          },
+            React.createElement(MaterialIcons, { testID: 'MaterialIcons-3', name: isFavorited ? 'favorite' : 'favorite-border', 
+              size: 20, 
+              color: isFavorited ? '#EF4444' : theme.colors.textSecondary 
+            })
+          ),
+          React.createElement(TouchableOpacity, { testID: 'TouchableOpacity-4', style: styles.quoteActionButton,
+            onPress: function() {
+              shareHook.share({ 
+                message: quote.text + '\n\n- ' + quote.author + '\n\nBhakti Darshan App से साझा किया गया' 
+              }).then(function(result) {
+                if (result.error) {
+                  Platform.OS === 'web' ? window.alert(result.error) : Alert.alert('Error', result.error);
+                }
+              });
+            },
+            componentId: 'quote-share-button'
+          },
+            React.createElement(MaterialIcons, { testID: 'MaterialIcons-4', name: 'share', 
+              size: 20, 
+              color: theme.colors.textSecondary 
+            })
+          )
+        )
+      )
+    );
+  };
+  // @end:HomeScreen-DailyQuote
+
+  // @section:HomeScreen @depends:[HomeScreen-state,HomeScreen-handlers,HomeScreen-Banner,HomeScreen-Cards,HomeScreen-DailyQuote,styles]
+  const HomeScreen = function() {
+    var state = useHomeScreenState();
+    var handlers = homeScreenHandlers;
+    var insets = useSafeAreaInsets();
+    var scrollBottomPadding = Platform.OS === 'web' ? WEB_TAB_MENU_PADDING : (TAB_MENU_HEIGHT + insets.bottom + SCROLL_EXTRA_PADDING);
+    var scrollTopPadding = insets.top;
+    var shareHook = useShare();
+    
+    useEffect(function() {
+      // Banner ad call removed - native library not available
+    }, []);
+
+    useEffect(function() {
+      var interval = setInterval(function() {
+        handlers.cycleBanner(state);
+      }, 5000);
+      return function() { clearInterval(interval); };
+    }, []);
+
+    var handleCardPress = function(category) {
+      Platform.OS === 'web' ? window.alert('नेविगेट करें: ' + category.title) : Alert.alert(category.title, 'जल्द ही उपलब्ध!');
+    };
+
+    return React.createElement(ScrollView, { testID: 'ScrollView-1', style: { flex: 1, backgroundColor: state.theme.colors.background },
+      contentContainerStyle: { paddingTop: scrollTopPadding, paddingBottom: scrollBottomPadding },
+      showsVerticalScrollIndicator: false,
+      componentId: 'home-screen'
+    },
+      React.createElement(View, { testID: 'View-11', style: styles.header },
+        React.createElement(Text, { testID: 'Text-8', style: [styles.headerTitle, { color: state.theme.colors.textPrimary }] }, 'भक्ति दर्शन'),
+        React.createElement(Text, { testID: 'Text-9', style: [styles.headerSubtitle, { color: state.theme.colors.textSecondary }] }, 'Connect with Divine')
+      ),
+      renderBannerSlider(state.theme, state.bannerIndex, function() { handlers.cycleBanner(state); }),
+      renderDailyQuote(state.theme, state.dailyQuote, state.favorites, function(quote) { handlers.toggleQuoteFavorite(state, quote); }, shareHook),
+      renderCategoryCards(state.theme, handleCardPress)
+    );
+  };
+  // @end:HomeScreen
+
+  // @section:BhajanScreen-state @depends:[ThemeContext]
+  const useBhajanScreenState = function() {
+    var themeContext = useTheme();
+    var theme = themeContext.theme;
+    var audioPlayer = null; // Audio player functionality disabled
+    var currentPlayingState = useState(null);
+    var currentPlaying = currentPlayingState[0];
+    var setCurrentPlaying = currentPlayingState[1];
+    
+    var bhajans = [
+      { id: '1', title: 'हरे कृष्ण हरे कृष्ण', artist: 'महामंत्र', duration: '5:30', audioUrl: 'hare-krishna-mantra' },
+      { id: '2', title: 'श्री राम जय राम', artist: 'राम भजन', duration: '4:15', audioUrl: 'shri-ram-jay-ram' },
+      { id: '3', title: 'ओम नमः शिवाय', artist: 'शिव मंत्र', duration: '3:45', audioUrl: 'om-namah-shivaya' },
+      { id: '4', title: 'जय गणेश जय गणेश', artist: 'गणेश भजन', duration: '4:00', audioUrl: 'jay-ganesh' },
+      { id: '5', title: 'सरस्वती वंदना', artist: 'माँ सरस्वती', duration: '3:20', audioUrl: 'saraswati-vandana' }
+    ];
+    
+    return { 
+      theme: theme, 
+      audioPlayer: audioPlayer,
+      currentPlaying: currentPlaying,
+      setCurrentPlaying: setCurrentPlaying,
+      bhajans: bhajans
+    };
+  };
+  // @end:BhajanScreen-state
+
+  // @section:BhajanScreen-handlers @depends:[BhajanScreen-state]
+  var bhajanScreenHandlers = {
+    playBhajan: function(state, bhajan) {
+      if (state.currentPlaying && state.currentPlaying.id === bhajan.id) {
+        if (state.audioPlayer.isPlaying) {
+          state.audioPlayer.pause();
+        } else {
+          state.audioPlayer.resume();
+        }
+      } else {
+        state.audioPlayer.play('AUDIO:' + bhajan.audioUrl);
+        state.setCurrentPlaying(bhajan);
+      }
+    },
+    stopBhajan: function(state) {
+      state.audioPlayer.stop();
+      state.setCurrentPlaying(null);
+    }
+  };
+  // @end:BhajanScreen-handlers
+
+  // @section:BhajanScreen-List @depends:[styles]
+  var renderBhajanList = function(theme, bhajans, currentPlaying, audioPlayer, onPlay, onStop) {
+    return React.createElement(FlatList, { testID: 'FlatList-1', data: bhajans,
+      keyExtractor: function(item) { return item.id; },
+      showsVerticalScrollIndicator: false,
+      renderItem: function(listItem) {
+        var bhajan = listItem.item;
+        var isPlaying = currentPlaying && currentPlaying.id === bhajan.id && audioPlayer.isPlaying;
+        var isPaused = currentPlaying && currentPlaying.id === bhajan.id && !audioPlayer.isPlaying;
+        
+        return React.createElement(TouchableOpacity, { testID: 'TouchableOpacity-5', style: [styles.bhajanItem, { backgroundColor: theme.colors.card }],
+          onPress: function() { onPlay(bhajan); },
+          componentId: 'bhajan-item-' + bhajan.id
+        },
+          React.createElement(View, { testID: 'View-12', style: styles.bhajanInfo },
+            React.createElement(Text, { testID: 'Text-10', style: [styles.bhajanTitle, { color: theme.colors.textPrimary }] }, bhajan.title),
+            React.createElement(Text, { testID: 'Text-11', style: [styles.bhajanArtist, { color: theme.colors.textSecondary }] }, bhajan.artist),
+            React.createElement(Text, { testID: 'Text-12', style: [styles.bhajanDuration, { color: theme.colors.textSecondary }] }, bhajan.duration)
+          ),
+          React.createElement(TouchableOpacity, { testID: 'TouchableOpacity-6', style: [styles.playButton, { backgroundColor: isPlaying || isPaused ? theme.colors.accent : theme.colors.primary }],
+            onPress: function() { onPlay(bhajan); },
+            componentId: 'play-button-' + bhajan.id
+          },
+            React.createElement(MaterialIcons, { testID: 'MaterialIcons-5', name: isPlaying ? 'pause' : 'play-arrow', 
+              size: 24, 
+              color: '#FFFFFF' 
+            })
+          )
+        );
+      },
+      contentContainerStyle: { paddingVertical: 16 },
+      componentId: 'bhajan-list'
+    });
+  };
+  // @end:BhajanScreen-List
+
+  // @section:BhajanScreen-Player @depends:[styles]
+  var renderAudioPlayer = function(theme, currentPlaying, audioPlayer, onStop) {
+    if (!currentPlaying) return null;
+    
+    return React.createElement(View, { testID: 'View-13', style: [styles.audioPlayerBar, { backgroundColor: theme.colors.card }] },
+      React.createElement(View, { testID: 'View-14', style: styles.playerInfo },
+        React.createElement(Text, { testID: 'Text-13', style: [styles.playerTitle, { color: theme.colors.textPrimary }] }, currentPlaying.title),
+        React.createElement(Text, { testID: 'Text-14', style: [styles.playerArtist, { color: theme.colors.textSecondary }] }, currentPlaying.artist)
+      ),
+      React.createElement(View, { testID: 'View-15', style: styles.playerControls },
+        React.createElement(TouchableOpacity, { testID: 'TouchableOpacity-7', style: styles.playerControlButton,
+          onPress: function() {
+            if (audioPlayer.isPlaying) {
+              audioPlayer.pause();
+            } else {
+              audioPlayer.resume();
+            }
+          },
+          componentId: 'player-play-pause'
+        },
+          React.createElement(MaterialIcons, { testID: 'MaterialIcons-6', name: audioPlayer.isPlaying ? 'pause' : 'play-arrow', 
+            size: 24, 
+            color: theme.colors.primary 
+          })
+        ),
+        React.createElement(TouchableOpacity, { testID: 'TouchableOpacity-8', style: styles.playerControlButton,
+          onPress: onStop,
+          componentId: 'player-stop'
+        },
+          React.createElement(MaterialIcons, { testID: 'MaterialIcons-7', name: 'stop', 
+            size: 24, 
+            color: theme.colors.textSecondary 
+          })
+        )
+      )
+    );
+  };
+  // @end:BhajanScreen-Player
+
+  // @section:BhajanScreen @depends:[BhajanScreen-state,BhajanScreen-handlers,BhajanScreen-List,BhajanScreen-Player,styles]
+  const BhajanScreen = function() {
+    var state = useBhajanScreenState();
+    var handlers = bhajanScreenHandlers;
+    var insets = useSafeAreaInsets();
+    var scrollTopPadding = insets.top;
+
+    return React.createElement(View, { testID: 'View-16', style: { flex: 1, backgroundColor: state.theme.colors.background },
+      componentId: 'bhajan-screen' 
+    },
+      React.createElement(View, { testID: 'View-17', style: [styles.screenHeader, { paddingTop: scrollTopPadding }] },
+        React.createElement(Text, { testID: 'Text-15', style: [styles.screenTitle, { color: state.theme.colors.textPrimary }] }, 'भजन'),
+        React.createElement(Text, { testID: 'Text-16', style: [styles.screenSubtitle, { color: state.theme.colors.textSecondary }] }, 'आध्यात्मिक संगीत सुनें')
+      ),
+      React.createElement(View, { testID: 'View-18', style: { flex: 1 } },
+        renderBhajanList(
+          state.theme, 
+          state.bhajans, 
+          state.currentPlaying, 
+          state.audioPlayer,
+          function(bhajan) { handlers.playBhajan(state, bhajan); },
+          function() { handlers.stopBhajan(state); }
+        )
+      ),
+      renderAudioPlayer(
+        state.theme, 
+        state.currentPlaying, 
+        state.audioPlayer,
+        function() { handlers.stopBhajan(state); }
+      )
+    );
+  };
+  // @end:BhajanScreen
+
+  // @section:MantraScreen-state @depends:[ThemeContext]
+  const useMantraScreenState = function() {
+    var themeContext = useTheme();
+    var theme = themeContext.theme;
+    var audioPlayerHook = useAudioPlayer();
+    var audioPlayer = audioPlayerHook ? { play: audioPlayerHook.play, pause: audioPlayerHook.pause, stop: audioPlayerHook.stop } : { play: function() {}, pause: function() {}, stop: function() {} };
+    var selectedMantraState = useState(null);
+    var selectedMantra = selectedMantraState[0];
+    var setSelectedMantra = selectedMantraState[1];
+    var chantCountState = useState(0);
+    var chantCount = chantCountState[0];
+    var setChantCount = chantCountState[1];
+    var targetCountState = useState(108);
+    var targetCount = targetCountState[0];
+    var setTargetCount = targetCountState[1];
+    var isChantingState = useState(false);
+    var isChanting = isChantingState[0];
+    var setIsChanting = isChantingState[1];
+    
+    var mantras = [
+      { id: '1', title: 'गायत्री मंत्र', sanskrit: 'ॐ भूर्भुवः स्वः तत्सवितुर्वरेण्यं भर्गो देवस्य धीमहि धियो यो नः प्रचोदयात्', meaning: 'सूर्य की तरह तेजस्वी परमात्मा हमारी बुद्धि को सन्मार्ग पर चलाए', audioUrl: 'gayatri-mantra' },
+      { id: '2', title: 'महामृत्युंजय मंत्र', sanskrit: 'ॐ त्र्यम्बकं यजामहे सुगन्धिं पुष्टिवर्धनम् उर्वारुकमिव बन्धनान्मृत्योर्मुक्षीय माऽमृतात्', meaning: 'हे त्रिनेत्रधारी शिव! हमें मृत्यु के बंधन से मुक्त करें', audioUrl: 'mahamrityunjaya-mantra' },
+      { id: '3', title: 'ॐ नमः शिवाय', sanskrit: 'ॐ नमः शिवाय', meaning: 'भगवान शिव को नमन', audioUrl: 'om-namah-shivaya-mantra' },
+      { id: '4', title: 'हरे कृष्ण महामंत्र', sanskrit: 'हरे कृष्ण हरे कृष्ण कृष्ण कृष्ण हरे हरे हरे राम हरे राम राम राम हरे हरे', meaning: 'श्रीकृष्ण और श्रीराम के नाम का जप', audioUrl: 'hare-krishna-mahamantra' },
+      { id: '5', title: 'गणेश मंत्र', sanskrit: 'ॐ गं गणपतये नमः', meaning: 'भगवान गणेश को नमन', audioUrl: 'ganesh-mantra' }
+    ];
+    
+    return { 
+      theme: theme, 
+      audioPlayer: audioPlayer,
+      selectedMantra: selectedMantra,
+      setSelectedMantra: setSelectedMantra,
+      chantCount: chantCount,
+      setChantCount: setChantCount,
+      targetCount: targetCount,
+      setTargetCount: setTargetCount,
+      isChanting: isChanting,
+      setIsChanting: setIsChanting,
+      mantras: mantras
+    };
+  };
+  // @end:MantraScreen-state
+
+  // @section:MantraScreen-handlers @depends:[MantraScreen-state]
+  var mantraScreenHandlers = {
+    selectMantra: function(state, mantra) {
+      state.setSelectedMantra(mantra);
+      state.setChantCount(0);
+      state.setIsChanting(false);
+      state.audioPlayer.stop();
+    },
+    incrementChant: function(state) {
+      if (state.chantCount < state.targetCount) {
+        state.setChantCount(function(prev) { return prev + 1; });
+        if (state.chantCount + 1 === state.targetCount) {
+          Platform.OS === 'web' ? window.alert('बधाई! आपने ' + state.targetCount + ' जप पूरा किया') : Alert.alert('बधाई!', 'आपने ' + state.targetCount + ' जप पूरा किया');
+        }
+      }
+    },
+    resetChant: function(state) {
+      state.setChantCount(0);
+    },
+    toggleAudio: function(state) {
+      if (state.selectedMantra) {
+        if (state.audioPlayer.isPlaying) {
+          state.audioPlayer.pause();
+          state.setIsChanting(false);
+        } else {
+          state.audioPlayer.play('AUDIO:' + state.selectedMantra.audioUrl, { loop: true });
+          state.setIsChanting(true);
+        }
+      }
+    }
+  };
+  // @end:MantraScreen-handlers
+
+  // @section:MantraScreen-List @depends:[styles]
+  var renderMantraList = function(theme, mantras, selectedMantra, onSelect) {
+    return React.createElement(View, { testID: 'View-19', style: styles.mantraListContainer },
+      React.createElement(Text, { testID: 'Text-17', style: [styles.sectionTitle, { color: theme.colors.textPrimary }] }, 'मंत्र चुनें'),
+      mantras.map(function(mantra) {
+        var isSelected = selectedMantra && selectedMantra.id === mantra.id;
+        return React.createElement(TouchableOpacity, { testID: 'TouchableOpacity-9', key: mantra.id,
+          style: [
+            styles.mantraCard,
+            { 
+              backgroundColor: isSelected ? theme.colors.primary + '20' : theme.colors.card,
+              borderColor: isSelected ? theme.colors.primary : 'transparent',
+              borderWidth: isSelected ? 2 : 0
+            }
+          ],
+          onPress: function() { onSelect(mantra); },
+          componentId: 'mantra-item-' + mantra.id
+        },
+          React.createElement(Text, { testID: 'Text-18', style: [styles.mantraTitle, { color: theme.colors.textPrimary }] }, mantra.title),
+          React.createElement(Text, { testID: 'Text-19', style: [styles.mantraText, { color: theme.colors.textPrimary }] }, mantra.sanskrit),
+          React.createElement(Text, { testID: 'Text-20', style: [styles.mantraMeaning, { color: theme.colors.textSecondary }] }, mantra.meaning)
+        );
+      })
+    );
+  };
+  // @end:MantraScreen-List
+
+  // @section:MantraScreen-Counter @depends:[styles]
+  var renderChantCounter = function(theme, selectedMantra, chantCount, targetCount, isChanting, onIncrement, onReset, onToggleAudio) {
+    if (!selectedMantra) {
+      return React.createElement(View, { testID: 'View-20', style: styles.counterPlaceholder },
+        React.createElement(MaterialIcons, { testID: 'MaterialIcons-8', name: 'self-improvement', 
+          size: 64, 
+          color: theme.colors.textSecondary 
+        }),
+        React.createElement(Text, { testID: 'Text-21', style: [styles.placeholderText, { color: theme.colors.textSecondary }] }, 'कृपया एक मंत्र चुनें')
+      );
+    }
+    
+    var progress = (chantCount / targetCount) * 100;
+    
+    return React.createElement(View, { testID: 'View-21', style: [styles.counterContainer, { backgroundColor: theme.colors.card }] },
+      React.createElement(Text, { testID: 'Text-22', style: [styles.counterTitle, { color: theme.colors.textPrimary }] }, selectedMantra.title),
+      React.createElement(View, { testID: 'View-22', style: styles.progressContainer },
+        React.createElement(View, { testID: 'View-23', style: [
+            styles.progressBar, 
+            { backgroundColor: theme.colors.border }
+          ] 
+        },
+          React.createElement(View, { testID: 'View-24', style: [
+              styles.progressFill, 
+              { 
+                width: progress + '%',
+                backgroundColor: theme.colors.primary 
+              }
+            ] 
+          })
+        ),
+        React.createElement(Text, { testID: 'Text-23', style: [styles.progressText, { color: theme.colors.textPrimary }] }, chantCount + ' / ' + targetCount)
+      ),
+      React.createElement(TouchableOpacity, { testID: 'TouchableOpacity-10', style: [styles.chantButton, { backgroundColor: theme.colors.primary }],
+        onPress: onIncrement,
+        componentId: 'chant-button'
+      },
+        React.createElement(MaterialIcons, { testID: 'MaterialIcons-9', name: 'add', size: 32, color: '#FFFFFF' }),
+        React.createElement(Text, { testID: 'Text-24', style: styles.chantButtonText }, 'जप करें')
+      ),
+      React.createElement(View, { testID: 'View-25', style: styles.chantControls },
+        React.createElement(TouchableOpacity, { testID: 'TouchableOpacity-11', style: [styles.controlButton, { backgroundColor: theme.colors.accent }],
+          onPress: onToggleAudio,
+          componentId: 'audio-toggle-button'
+        },
+          React.createElement(MaterialIcons, { testID: 'MaterialIcons-10', name: isChanting ? 'pause' : 'play-arrow', 
+            size: 20, 
+            color: '#FFFFFF' 
+          }),
+          React.createElement(Text, { testID: 'Text-25', style: styles.controlButtonText }, isChanting ? 'रोकें' : 'सुनें')
+        ),
+        React.createElement(TouchableOpacity, { testID: 'TouchableOpacity-12', style: [styles.controlButton, { backgroundColor: theme.colors.textSecondary }],
+          onPress: onReset,
+          componentId: 'reset-button'
+        },
+          React.createElement(MaterialIcons, { testID: 'MaterialIcons-11', name: 'refresh', size: 20, color: '#FFFFFF' }),
+          React.createElement(Text, { testID: 'Text-26', style: styles.controlButtonText }, 'रीसेट')
+        )
+      )
+    );
+  };
+  // @end:MantraScreen-Counter
+
+  // @section:MantraScreen @depends:[MantraScreen-state,MantraScreen-handlers,MantraScreen-List,MantraScreen-Counter,styles]
+  const MantraScreen = function() {
+    var state = useMantraScreenState();
+    var handlers = mantraScreenHandlers;
+    var insets = useSafeAreaInsets();
+    var scrollBottomPadding = Platform.OS === 'web' ? WEB_TAB_MENU_PADDING : (TAB_MENU_HEIGHT + insets.bottom + SCROLL_EXTRA_PADDING);
+    var scrollTopPadding = insets.top;
+
+    return React.createElement(ScrollView, { testID: 'ScrollView-2', style: { flex: 1, backgroundColor: state.theme.colors.background },
+      contentContainerStyle: { paddingTop: scrollTopPadding, paddingBottom: scrollBottomPadding },
+      showsVerticalScrollIndicator: false,
+      componentId: 'mantra-screen'
+    },
+      React.createElement(View, { testID: 'View-26', style: styles.screenHeader },
+        React.createElement(Text, { testID: 'Text-27', style: [styles.screenTitle, { color: state.theme.colors.textPrimary }] }, 'मंत्र जप'),
+        React.createElement(Text, { testID: 'Text-28', style: [styles.screenSubtitle, { color: state.theme.colors.textSecondary }] }, 'आध्यात्मिक शक्ति पाएं')
+      ),
+      renderChantCounter(
+        state.theme,
+        state.selectedMantra,
+        state.chantCount,
+        state.targetCount,
+        state.isChanting,
+        function() { handlers.incrementChant(state); },
+        function() { handlers.resetChant(state); },
+        function() { handlers.toggleAudio(state); }
+      ),
+      renderMantraList(
+        state.theme, 
+        state.mantras, 
+        state.selectedMantra,
+        function(mantra) { handlers.selectMantra(state, mantra); }
+      )
+    );
+  };
+  // @end:MantraScreen
+
+  // @section:FestivalScreen-state @depends:[ThemeContext]
+  const useFestivalScreenState = function() {
+    var themeContext = useTheme();
+    var theme = themeContext.theme;
+    
+    var festivals = [
+      { 
+        id: '1', 
+        name: 'दीपावली', 
+        date: '2024-11-12', 
+        description: 'रोशनी का त्यौहार, माँ लक्ष्मी की पूजा का दिन',
+        significance: 'भगवान राम के अयोध्या वापसी की खुशी में मनाया जाता है',
+        image: 'IMAGE:diwali-diyas-rangoli-festival'
+      },
+      { 
+        id: '2', 
+        name: 'होली', 
+        date: '2025-03-14', 
+        description: 'रंगों का त्यौहार, प्रेम और एकता का प्रतीक',
+        significance: 'प्रह्लाद और हिरण्यकश्यप की कथा से जुड़ा त्यौहार',
+        image: 'IMAGE:holi-colors-celebration-spring'
+      },
+      { 
+        id: '3', 
+        name: 'जन्माष्टमी', 
+        date: '2024-08-26', 
+        description: 'भगवान श्रीकृष्ण का जन्मदिन',
+        significance: 'मथुरा में कंस के कारागार में कृष्ण का जन्म',
+        image: 'IMAGE:krishna-janmashtami-temple-celebration'
+      },
+      { 
+        id: '4', 
+        name: 'नवरात्रि', 
+        date: '2024-10-03', 
+        description: 'माँ दुर्गा की नौ दिन की पूजा',
+        significance: 'देवी दुर्गा के नौ रूपों की आराधना',
+        image: 'IMAGE:navratri-durga-mata-temple-worship'
+      },
+      { 
+        id: '5', 
+        name: 'गणेश चतुर्थी', 
+        date: '2024-09-07', 
+        description: 'भगवान गणेश का जन्मदिन',
+        significance: 'विघ्न हर्ता गणेश जी की पूजा का मुख्य दिन',
+        image: 'IMAGE:ganesh-chaturthi-festival-celebration'
+      },
+      { 
+        id: '6', 
+        name: 'शिवरात्रि', 
+        date: '2025-02-26', 
+        description: 'भगवान शिव की रात्रि जागरण',
+        significance: 'शिव और पार्वती के विवाह का दिन',
+        image: 'IMAGE:shivratri-temple-night-worship'
+      }
+    ];
+    
+    return { theme: theme, festivals: festivals };
+  };
+  // @end:FestivalScreen-state
+
+  // @section:FestivalScreen-handlers @depends:[FestivalScreen-state]
+  var festivalScreenHandlers = {
+    formatDate: function(dateString) {
+      var date = new Date(dateString);
+      var months = [
+        'जनवरी', 'फरवरी', 'मार्च', 'अप्रैल', 'मई', 'जून',
+        'जुलाई', 'अगस्त', 'सितम्बर', 'अक्टूबर', 'नवम्बर', 'दिसम्बर'
+      ];
+      return date.getDate() + ' ' + months[date.getMonth()] + ' ' + date.getFullYear();
+    },
+    getDaysUntil: function(dateString) {
+      var today = new Date();
+      var festivalDate = new Date(dateString);
+      var timeDiff = festivalDate.getTime() - today.getTime();
+      var daysDiff = Math.ceil(timeDiff / (1000 * 3600 * 24));
+      
+      if (daysDiff < 0) return 'बीत गया';
+      if (daysDiff === 0) return 'आज';
+      if (daysDiff === 1) return 'कल';
+      return daysDiff + ' दिन बाकी';
+    }
+  };
+  // @end:FestivalScreen-handlers
+
+  // @section:FestivalScreen-List @depends:[styles]
+  var renderFestivalList = function(theme, festivals, formatDate, getDaysUntil) {
+    return React.createElement(FlatList, { testID: 'FlatList-2', data: festivals,
+      keyExtractor: function(item) { return item.id; },
+      showsVerticalScrollIndicator: false,
+      renderItem: function(listItem) {
+        var festival = listItem.item;
+        var daysUntil = getDaysUntil(festival.date);
+        var isUpcoming = daysUntil !== 'बीत गया';
+        
+        return React.createElement(View, { testID: 'View-27', style: [styles.festivalCard, { backgroundColor: theme.colors.card }],
+          componentId: 'festival-item-' + festival.id
+        },
+          React.createElement(Image, { testID: 'Image-2', source: { uri: festival.image },
+            style: styles.festivalImage,
+            componentId: 'festival-image-' + festival.id
+          }),
+          React.createElement(View, { testID: 'View-28', style: styles.festivalContent },
+            React.createElement(View, { testID: 'View-29', style: styles.festivalHeader },
+              React.createElement(Text, { testID: 'Text-29', style: [styles.festivalName, { color: theme.colors.textPrimary }] }, festival.name),
+              React.createElement(View, { testID: 'View-30', style: [
+                  styles.festivalStatus, 
+                  { backgroundColor: isUpcoming ? theme.colors.success : theme.colors.textSecondary }
+                ] 
+              },
+                React.createElement(Text, { testID: 'Text-30', style: styles.festivalStatusText }, daysUntil)
+              )
+            ),
+            React.createElement(Text, { testID: 'Text-31', style: [styles.festivalDate, { color: theme.colors.textSecondary }] }, formatDate(festival.date)),
+            React.createElement(Text, { testID: 'Text-32', style: [styles.festivalDescription, { color: theme.colors.textPrimary }] }, festival.description),
+            React.createElement(Text, { testID: 'Text-33', style: [styles.festivalSignificance, { color: theme.colors.textSecondary }] }, festival.significance)
+          )
+        );
+      },
+      contentContainerStyle: { paddingVertical: 16 },
+      componentId: 'festival-list'
+    });
+  };
+  // @end:FestivalScreen-List
+
+  // @section:FestivalScreen @depends:[FestivalScreen-state,FestivalScreen-handlers,FestivalScreen-List,styles]
+  const FestivalScreen = function() {
+    var state = useFestivalScreenState();
+    var handlers = festivalScreenHandlers;
+    var insets = useSafeAreaInsets();
+    var scrollTopPadding = insets.top;
+
+    return React.createElement(View, { testID: 'View-31', style: { flex: 1, backgroundColor: state.theme.colors.background },
+      componentId: 'festival-screen' 
+    },
+      React.createElement(View, { testID: 'View-32', style: [styles.screenHeader, { paddingTop: scrollTopPadding }] },
+        React.createElement(Text, { testID: 'Text-34', style: [styles.screenTitle, { color: state.theme.colors.textPrimary }] }, 'त्यौहार'),
+        React.createElement(Text, { testID: 'Text-35', style: [styles.screenSubtitle, { color: state.theme.colors.textSecondary }] }, 'आने वाले हिंदू पर्व')
+      ),
+      React.createElement(View, { testID: 'View-33', style: { flex: 1 } },
+        renderFestivalList(
+          state.theme, 
+          state.festivals,
+          handlers.formatDate,
+          handlers.getDaysUntil
+        )
+      )
+    );
+  };
+  // @end:FestivalScreen
+
+  // @section:ProfileScreen-state @depends:[ThemeContext]
+  const useProfileScreenState = function() {
+    var themeContext = useTheme();
+    var theme = themeContext.theme;
+    var darkMode = themeContext.darkMode;
+    var toggleDarkMode = themeContext.toggleDarkMode;
+    
+    var { data: favorites } = useQuery('favorites', {});
+    var { data: downloads } = useQuery('offlineContent', {});
+    
+    var profileData = {
+      name: 'भक्त',
+      email: 'devotee@bhaktidarshan.com',
+      joinDate: '2024-01-01',
+      totalChants: 1080,
+      favoritesCount: (favorites || []).length,
+      downloadsCount: (downloads || []).length
+    };
+    
+    return { 
+      theme: theme, 
+      darkMode: darkMode,
+      toggleDarkMode: toggleDarkMode,
+      profileData: profileData,
+      favorites: favorites || [],
+      downloads: downloads || []
+    };
+  };
+  // @end:ProfileScreen-state
+
+  // @section:ProfileScreen-Stats @depends:[styles]
+  var renderProfileStats = function(theme, profileData) {
+    var stats = [
+      { label: 'कुल जप', value: String(profileData.totalChants), icon: 'self-improvement' },
+      { label: 'पसंदीदा', value: String(profileData.favoritesCount), icon: 'favorite' },
+      { label: 'डाउनलोड', value: String(profileData.downloadsCount), icon: 'download' }
+    ];
+    
+    return React.createElement(View, { testID: 'View-34', style: styles.statsContainer },
+      stats.map(function(stat, index) {
+        return React.createElement(View, { testID: 'View-35', key: String(index),
+          style: [styles.statCard, { backgroundColor: theme.colors.card }],
+          componentId: 'stat-card-' + index
+        },
+          React.createElement(MaterialIcons, { testID: 'MaterialIcons-12', name: stat.icon, 
+            size: 24, 
+            color: theme.colors.primary 
+          }),
+          React.createElement(Text, { testID: 'Text-36', style: [styles.statValue, { color: theme.colors.textPrimary }] }, stat.value),
+          React.createElement(Text, { testID: 'Text-37', style: [styles.statLabel, { color: theme.colors.textSecondary }] }, stat.label)
+        );
+      })
+    );
+  };
+  // @end:ProfileScreen-Stats
+
+  // @section:ProfileScreen-Settings @depends:[styles]
+  var renderSettingsSection = function(theme, darkMode, onToggleDarkMode) {
+    var settingsItems = [
+      { label: 'डार्क मोड', type: 'toggle', value: darkMode, onToggle: onToggleDarkMode },
+      { label: 'भाषा', type: 'action', value: 'हिंदी', onPress: function() { 
+        Platform.OS === 'web' ? window.alert('भाषा सेटिंग्स') : Alert.alert('भाषा', 'जल्द ही उपलब्ध!'); 
+      }},
+      { label: 'अधिसूचनाएं', type: 'action', value: 'चालू', onPress: function() { 
+        Platform.OS === 'web' ? window.alert('अधिसूचना सेटिंग्स') : Alert.alert('अधिसूचनाएं', 'जल्द ही उपलब्ध!'); 
+      }},
+      { label: 'बैकअप', type: 'action', value: '', onPress: function() { 
+        Platform.OS === 'web' ? window.alert('बैकअप सेटिंग्स') : Alert.alert('बैकअप', 'जल्द ही उपलब्ध!'); 
+      }}
+    ];
+    
+    return React.createElement(View, { testID: 'View-36', style: styles.settingsContainer },
+      React.createElement(Text, { testID: 'Text-38', style: [styles.sectionTitle, { color: theme.colors.textPrimary }] }, 'सेटिंग्स'),
+      settingsItems.map(function(item, index) {
+        return React.createElement(TouchableOpacity, { testID: 'TouchableOpacity-13', key: String(index),
+          style: [styles.settingItem, { backgroundColor: theme.colors.card }],
+          onPress: item.type === 'action' ? item.onPress : undefined,
+          disabled: item.type === 'toggle',
+          componentId: 'setting-item-' + index
+        },
+          React.createElement(Text, { testID: 'Text-39', style: [styles.settingLabel, { color: theme.colors.textPrimary }] }, item.label),
+          item.type === 'toggle' 
+            ? React.createElement(Switch, { testID: 'Switch-1', value: item.value,
+                onValueChange: item.onToggle,
+                trackColor: { false: theme.colors.border, true: theme.colors.primary },
+                thumbColor: '#FFFFFF',
+                componentId: 'setting-toggle-' + index
+              })
+            : React.createElement(View, { testID: 'View-37', style: styles.settingRight },
+                item.value ? React.createElement(Text, { testID: 'Text-40', style: [styles.settingValue, { color: theme.colors.textSecondary }] }, item.value) : null,
+                React.createElement(MaterialIcons, { testID: 'MaterialIcons-13', name: 'chevron-right', 
+                  size: 20, 
+                  color: theme.colors.textSecondary 
+                })
+              )
+        );
+      })
+    );
+  };
+  // @end:ProfileScreen-Settings
+
+  // @section:ProfileScreen @depends:[ProfileScreen-state,ProfileScreen-Stats,ProfileScreen-Settings,styles]
+  const ProfileScreen = function() {
+    var state = useProfileScreenState();
+    var insets = useSafeAreaInsets();
+    var scrollBottomPadding = Platform.OS === 'web' ? WEB_TAB_MENU_PADDING : (TAB_MENU_HEIGHT + insets.bottom + SCROLL_EXTRA_PADDING);
+    var scrollTopPadding = insets.top;
+
+    return React.createElement(ScrollView, { testID: 'ScrollView-3', style: { flex: 1, backgroundColor: state.theme.colors.background },
+      contentContainerStyle: { paddingTop: scrollTopPadding, paddingBottom: scrollBottomPadding },
+      showsVerticalScrollIndicator: false,
+      componentId: 'profile-screen'
+    },
+      React.createElement(View, { testID: 'View-38', style: styles.profileHeader },
+        React.createElement(View, { testID: 'View-39', style: [styles.profileAvatar, { backgroundColor: state.theme.colors.primary }] },
+          React.createElement(MaterialIcons, { testID: 'MaterialIcons-14', name: 'person', size: 48, color: '#FFFFFF' })
+        ),
+        React.createElement(Text, { testID: 'Text-41', style: [styles.profileName, { color: state.theme.colors.textPrimary }] }, state.profileData.name),
+        React.createElement(Text, { testID: 'Text-42', style: [styles.profileEmail, { color: state.theme.colors.textSecondary }] }, state.profileData.email)
+      ),
+      renderProfileStats(state.theme, state.profileData),
+      renderSettingsSection(state.theme, state.darkMode, state.toggleDarkMode)
+    );
+  };
+  // @end:ProfileScreen
+
+  // @section:TabNavigator @depends:[HomeScreen,BhajanScreen,MantraScreen,FestivalScreen,ProfileScreen,navigation-setup]
+  const TabNavigator = function() {
+    var insets = useSafeAreaInsets();
+    var themeContext = useTheme();
+    var theme = themeContext.theme;
+    
+    return React.createElement(View, { testID: 'View-40', style: { flex: 1, width: '100%', height: '100%', overflow: 'hidden' } },
+      React.createElement(Tab.Navigator, { testID: 'Navigator-1', screenOptions: {
+          headerShown: false,
+          tabBarStyle: { 
+            position: 'absolute', 
+            bottom: 0, 
+            height: TAB_MENU_HEIGHT + insets.bottom, 
+            borderTopWidth: 0, 
+            backgroundColor: theme.colors.card,
+            shadowColor: '#000',
+            shadowOffset: { width: 0, height: -2 },
+            shadowOpacity: 0.1,
+            shadowRadius: 8,
+            elevation: 16
+          },
+          tabBarItemStyle: { padding: 0 },
+          tabBarActiveTintColor: theme.colors.primary,
+          tabBarInactiveTintColor: theme.colors.textSecondary,
+          tabBarLabelStyle: { fontSize: 10, fontWeight: 'bold' }
+        }
+      },
+        React.createElement(Tab.Screen, { testID: 'Screen-1', name: 'Home',
+          component: HomeScreen,
+          options: { 
+            tabBarLabel: 'होम',
+            tabBarIcon: function(props) { 
+              return React.createElement(MaterialIcons, { testID: 'MaterialIcons-15', name: 'home', size: 24, color: props.color }); 
+            } 
+          }
+        }),
+        React.createElement(Tab.Screen, { testID: 'Screen-2', name: 'Bhajan',
+          component: BhajanScreen,
+          options: { 
+            tabBarLabel: 'भजन',
+            tabBarIcon: function(props) { 
+              return React.createElement(MaterialIcons, { testID: 'MaterialIcons-16', name: 'music-note', size: 24, color: props.color }); 
+            } 
+          }
+        }),
+        React.createElement(Tab.Screen, { testID: 'Screen-3', name: 'Mantra',
+          component: MantraScreen,
+          options: { 
+            tabBarLabel: 'मंत्र',
+            tabBarIcon: function(props) { 
+              return React.createElement(MaterialIcons, { testID: 'MaterialIcons-17', name: 'self-improvement', size: 24, color: props.color }); 
+            } 
+          }
+        }),
+        React.createElement(Tab.Screen, { testID: 'Screen-4', name: 'Festivals',
+          component: FestivalScreen,
+          options: { 
+            tabBarLabel: 'त्यौहार',
+            tabBarIcon: function(props) { 
+              return React.createElement(MaterialIcons, { testID: 'MaterialIcons-18', name: 'event', size: 24, color: props.color }); 
+            } 
+          }
+        }),
+        React.createElement(Tab.Screen, { testID: 'Screen-5', name: 'Profile',
+          component: ProfileScreen,
+          options: { 
+            tabBarLabel: 'प्रोफाइल',
+            tabBarIcon: function(props) { 
+              return React.createElement(MaterialIcons, { testID: 'MaterialIcons-19', name: 'person', size: 24, color: props.color }); 
+            } 
+          }
+        })
+      )
+    );
+  };
+  // @end:TabNavigator
+
+  // @section:styles @depends:[theme]
+  const styles = StyleSheet.create({
+    // Header styles
+    header: {
+      padding: 20,
+      alignItems: 'center'
+    },
+    headerTitle: {
+      fontSize: 28,
+      fontWeight: 'bold',
+      textAlign: 'center'
+    },
+    headerSubtitle: {
+      fontSize: 14,
+      textAlign: 'center',
+      marginTop: 4
+    },
+    screenHeader: {
+      padding: 20,
+      alignItems: 'center',
+      borderBottomWidth: 1,
+      borderBottomColor: '#E5E7EB'
+    },
+    screenTitle: {
+      fontSize: 24,
+      fontWeight: 'bold'
+    },
+    screenSubtitle: {
+      fontSize: 14,
+      marginTop: 4
+    },
+    
+    // Banner styles
+    bannerContainer: {
+      height: 200,
+      marginHorizontal: 20,
+      marginBottom: 20,
+      borderRadius: 16,
+      overflow: 'hidden',
+      position: 'relative'
+    },
+    bannerSlide: {
+      flex: 1,
+      position: 'relative'
+    },
+    bannerImage: {
+      width: '100%',
+      height: '100%'
+    },
+    bannerOverlay: {
+      position: 'absolute',
+      bottom: 0,
+      left: 0,
+      right: 0,
+      backgroundColor: 'rgba(0,0,0,0.6)',
+      padding: 16
+    },
+    bannerText: {
+      color: '#FFFFFF',
+      fontSize: 16,
+      fontWeight: 'bold',
+      textAlign: 'center'
+    },
+    bannerIndicators: {
+      position: 'absolute',
+      bottom: 8,
+      left: 0,
+      right: 0,
+      flexDirection: 'row',
+      justifyContent: 'center',
+      alignItems: 'center'
+    },
+    bannerDot: {
+      width: 8,
+      height: 8,
+      borderRadius: 4,
+      marginHorizontal: 4
+    },
+    
+    // Quote styles
+    quoteContainer: {
+      marginHorizontal: 20,
+      marginBottom: 20
+    },
+    quoteCard: {
+      padding: 20,
+      borderRadius: 16,
+      shadowColor: '#000',
+      shadowOffset: { width: 0, height: 2 },
+      shadowOpacity: 0.1,
+      shadowRadius: 8,
+      elevation: 4
+    },
+    quoteText: {
+      fontSize: 16,
+      lineHeight: 24,
+      textAlign: 'center',
+      fontStyle: 'italic',
+      marginBottom: 12
+    },
+    quoteAuthor: {
+      fontSize: 14,
+      textAlign: 'center',
+      marginBottom: 16
+    },
+    quoteActions: {
+      flexDirection: 'row',
+      justifyContent: 'center',
+      alignItems: 'center'
+    },
+    quoteActionButton: {
+      padding: 8,
+      marginHorizontal: 12
+    },
+    
+    // Card styles
+    cardsContainer: {
+      marginHorizontal: 20
+    },
+    cardsGrid: {
+      flexDirection: 'row',
+      flexWrap: 'wrap',
+      justifyContent: 'space-between'
+    },
+    categoryCard: {
+      width: '48%',
+      padding: 16,
+      borderRadius: 16,
+      marginBottom: 16,
+      shadowColor: '#000',
+      shadowOffset: { width: 0, height: 2 },
+      shadowOpacity: 0.1,
+      shadowRadius: 8,
+      elevation: 4,
+      alignItems: 'center'
+    },
+    cardIcon: {
+      width: 48,
+      height: 48,
+      borderRadius: 24,
+      alignItems: 'center',
+      justifyContent: 'center',
+      marginBottom: 12
+    },
+    cardTitle: {
+      fontSize: 16,
+      fontWeight: 'bold',
+      textAlign: 'center',
+      marginBottom: 4
+    },
+    cardDescription: {
+      fontSize: 12,
+      textAlign: 'center',
+      lineHeight: 16
+    },
+    
+    // Section title
+    sectionTitle: {
+      fontSize: 18,
+      fontWeight: 'bold',
+      marginBottom: 16
+    },
+    
+    // Bhajan screen styles
+    bhajanItem: {
+      flexDirection: 'row',
+      padding: 16,
+      marginHorizontal: 20,
+      marginBottom: 12,
+      borderRadius: 12,
+      alignItems: 'center',
+      shadowColor: '#000',
+      shadowOffset: { width: 0, height: 1 },
+      shadowOpacity: 0.1,
+      shadowRadius: 4,
+      elevation: 2
+    },
+    bhajanInfo: {
+      flex: 1
+    },
+    bhajanTitle: {
+      fontSize: 16,
+      fontWeight: 'bold',
+      marginBottom: 4
+    },
+    bhajanArtist: {
+      fontSize: 14,
+      marginBottom: 2
+    },
+    bhajanDuration: {
+      fontSize: 12
+    },
+    playButton: {
+      width: 48,
+      height: 48,
+      borderRadius: 24,
+      alignItems: 'center',
+      justifyContent: 'center',
+      marginLeft: 12
+    },
+    audioPlayerBar: {
+      position: 'absolute',
+      bottom: TAB_MENU_HEIGHT,
+      left: 0,
+      right: 0,
+      flexDirection: 'row',
+      alignItems: 'center',
+      padding: 16,
+      borderTopWidth: 1,
+      borderTopColor: '#E5E7EB'
+    },
+    playerInfo: {
+      flex: 1
+    },
+    playerTitle: {
+      fontSize: 14,
+      fontWeight: 'bold',
+      marginBottom: 2
+    },
+    playerArtist: {
+      fontSize: 12
+    },
+    playerControls: {
+      flexDirection: 'row',
+      alignItems: 'center'
+    },
+    playerControlButton: {
+      padding: 8,
+      marginLeft: 8
+    },
+    
+    // Mantra screen styles
+    mantraListContainer: {
+      marginHorizontal: 20,
+      marginBottom: 20
+    },
+    mantraCard: {
+      padding: 16,
+      borderRadius: 12,
+      marginBottom: 12,
+      shadowColor: '#000',
+      shadowOffset: { width: 0, height: 1 },
+      shadowOpacity: 0.1,
+      shadowRadius: 4,
+      elevation: 2
+    },
+    mantraTitle: {
+      fontSize: 16,
+      fontWeight: 'bold',
+      marginBottom: 8
+    },
+    mantraText: {
+      fontSize: 14,
+      lineHeight: 20,
+      marginBottom: 8
+    },
+    mantraMeaning: {
+      fontSize: 12,
+      fontStyle: 'italic',
+      lineHeight: 16
+    },
+    counterContainer: {
+      margin: 20,
+      padding: 20,
+      borderRadius: 16,
+      alignItems: 'center',
+      shadowColor: '#000',
+      shadowOffset: { width: 0, height: 2 },
+      shadowOpacity: 0.1,
+      shadowRadius: 8,
+      elevation: 4
+    },
+    counterTitle: {
+      fontSize: 18,
+      fontWeight: 'bold',
+      textAlign: 'center',
+      marginBottom: 20
+    },
+    progressContainer: {
+      width: '100%',
+      alignItems: 'center',
+      marginBottom: 24
+    },
+    progressBar: {
+      width: '100%',
+      height: 8,
+      borderRadius: 4,
+      overflow: 'hidden',
+      marginBottom: 8
+    },
+    progressFill: {
+      height: '100%',
+      borderRadius: 4
+    },
+    progressText: {
+      fontSize: 16,
+      fontWeight: 'bold'
+    },
+    chantButton: {
+      width: 120,
+      height: 120,
+      borderRadius: 60,
+      alignItems: 'center',
+      justifyContent: 'center',
+      marginBottom: 24,
+      shadowColor: '#000',
+      shadowOffset: { width: 0, height: 4 },
+      shadowOpacity: 0.2,
+      shadowRadius: 8,
+      elevation: 8
+    },
+    chantButtonText: {
+      color: '#FFFFFF',
+      fontSize: 14,
+      fontWeight: 'bold',
+      marginTop: 4
+    },
+    chantControls: {
+      flexDirection: 'row',
+      justifyContent: 'center'
+    },
+    controlButton: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      paddingHorizontal: 16,
+      paddingVertical: 8,
+      borderRadius: 20,
+      marginHorizontal: 8
+    },
+    controlButtonText: {
+      color: '#FFFFFF',
+      fontSize: 12,
+      fontWeight: 'bold',
+      marginLeft: 4
+    },
+    counterPlaceholder: {
+      margin: 20,
+      padding: 40,
+      alignItems: 'center',
+      justifyContent: 'center'
+    },
+    placeholderText: {
+      fontSize: 16,
+      textAlign: 'center',
+      marginTop: 16
+    },
+    
+    // Festival screen styles
+    festivalCard: {
+      marginHorizontal: 20,
+      marginBottom: 16,
+      borderRadius: 16,
+      overflow: 'hidden',
+      shadowColor: '#000',
+      shadowOffset: { width: 0, height: 2 },
+      shadowOpacity: 0.1,
+      shadowRadius: 8,
+      elevation: 4
+    },
+    festivalImage: {
+      width: '100%',
+      height: 120
+    },
+    festivalContent: {
+      padding: 16
+    },
+    festivalHeader: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      marginBottom: 8
+    },
+    festivalName: {
+      fontSize: 18,
+      fontWeight: 'bold',
+      flex: 1
+    },
+    festivalStatus: {
+      paddingHorizontal: 8,
+      paddingVertical: 4,
+      borderRadius: 12
+    },
+    festivalStatusText: {
+      color: '#FFFFFF',
+      fontSize: 10,
+      fontWeight: 'bold'
+    },
+    festivalDate: {
+      fontSize: 14,
+      marginBottom: 8
+    },
+    festivalDescription: {
+      fontSize: 14,
+      lineHeight: 20,
+      marginBottom: 8
+    },
+    festivalSignificance: {
+      fontSize: 12,
+      fontStyle: 'italic',
+      lineHeight: 16
+    },
+    
+    // Profile screen styles
+    profileHeader: {
+      alignItems: 'center',
+      paddingHorizontal: 20,
+      paddingBottom: 20,
+      borderBottomWidth: 1,
+      borderBottomColor: '#E5E7EB'
+    },
+    profileAvatar: {
+      width: 80,
+      height: 80,
+      borderRadius: 40,
+      alignItems: 'center',
+      justifyContent: 'center',
+      marginBottom: 12
+    },
+    profileName: {
+      fontSize: 20,
+      fontWeight: 'bold',
+      marginBottom: 4
+    },
+    profileEmail: {
+      fontSize: 14
+    },
+    statsContainer: {
+      flexDirection: 'row',
+      justifyContent: 'space-around',
+      paddingHorizontal: 20,
+      paddingVertical: 20
+    },
+    statCard: {
+      alignItems: 'center',
+      padding: 16,
+      borderRadius: 12,
+      minWidth: 80,
+      shadowColor: '#000',
+      shadowOffset: { width: 0, height: 1 },
+      shadowOpacity: 0.1,
+      shadowRadius: 4,
+      elevation: 2
+    },
+    statValue: {
+      fontSize: 20,
+      fontWeight: 'bold',
+      marginTop: 8,
+      marginBottom: 4
+    },
+    statLabel: {
+      fontSize: 12,
+      textAlign: 'center'
+    },
+    settingsContainer: {
+      marginHorizontal: 20
+    },
+    settingItem: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      padding: 16,
+      borderRadius: 12,
+      marginBottom: 8,
+      shadowColor: '#000',
+      shadowOffset: { width: 0, height: 1 },
+      shadowOpacity: 0.1,
+      shadowRadius: 4,
+      elevation: 2
+    },
+    settingLabel: {
+      fontSize: 16,
+      flex: 1
+    },
+    settingRight: {
+      flexDirection: 'row',
+      alignItems: 'center'
+    },
+    settingValue: {
+      fontSize: 14,
+      marginRight: 8
+    }
+  });
+  // @end:styles
+
+  // @section:return @depends:[ThemeProvider,TabNavigator]
+  return React.createElement(ThemeProvider, { testID: 'ThemeProvider-1' },
+    React.createElement(View, { testID: 'View-41', style: { flex: 1, width: '100%', height: '100%' } },
+      React.createElement(StatusBar, { testID: 'StatusBar-1', barStyle: 'dark-content' }),
+      React.createElement(TabNavigator)
+    )
+  );
+  // @end:return
+};
+return ComponentFunction;
